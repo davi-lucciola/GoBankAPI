@@ -10,8 +10,8 @@ type CreateAccountRequest struct {
 }
 
 type TransferRequest struct {
-	ToAccountId uuid.UUID `json:toAccountId`
-	Amount      int64     `json:amount`
+	ToAccountId uuid.UUID `json:"toAccountId"`
+	Amount      int64     `json:"amount"`
 }
 
 type LoginRequest struct {

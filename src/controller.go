@@ -50,7 +50,7 @@ func (ac *AccountController) handleAccountById(w http.ResponseWriter, r *http.Re
 	}
 }
 
-func (ac *AccountController) getAccounts(w http.ResponseWriter, r *http.Request) error {
+func (ac *AccountController) getAccounts(w http.ResponseWriter, _ *http.Request) error {
 	accounts, err := ac.storage.GetAccounts()
 
 	if err != nil {
