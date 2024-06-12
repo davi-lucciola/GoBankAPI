@@ -5,7 +5,7 @@ import (
 )
 
 func main() {
-	storage, err := NewPostgresStore()
+	storage, err := NewPostgresStorage()
 
 	if err != nil {
 		log.Fatal(err)

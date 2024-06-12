@@ -9,18 +9,19 @@ import (
 )
 
 type Storage interface {
-	CreateAccount(*Account) error
+	CreateAccount(*Account, *User) (*Account, error)
 	DeleteAccount(uuid.UUID) error
 	UpdateAccount(*Account) error
 	GetAccountById(uuid.UUID) (*Account, error)
 	GetAccounts() ([]*Account, error)
+	GetUserByUsername(string) (*User, error)
 }
 
 type PostgresStore struct {
 	db *sql.DB
 }
 
-func NewPostgresStore() (*PostgresStore, error) {
+func NewPostgresStorage() (*PostgresStore, error) {
 	connStr := "host=db user=postgres dbname=go_bank_api password=password sslmode=disable"
 
 	db, err := sql.Open("postgres", connStr)
@@ -39,22 +40,7 @@ func NewPostgresStore() (*PostgresStore, error) {
 }
 
 func (s *PostgresStore) Init() error {
-	return s.createTable()
-}
-
-func (s *PostgresStore) createTable() error {
-	query := `
-		CREATE TABLE IF NOT EXISTS account (
-			id UUID PRIMARY KEY,
-			name VARCHAR(100) NOT NULL,
-			cpf VARCHAR(11) NOT NULL UNIQUE,
-			number SERIAL NOT NULL,
-			balance INT NOT NULL,
-			created_at TIMESTAMP
-		)`
-
-	_, err := s.db.Exec(query)
-	return err
+	return createTables(s.db)
 }
 
 func scanIntoAccount(rows *sql.Rows) (*Account, error) {
@@ -65,6 +51,7 @@ func scanIntoAccount(rows *sql.Rows) (*Account, error) {
 		&account.Cpf,
 		&account.Number,
 		&account.Balance,
+		&account.UserID,
 		&account.CreatedAt,
 	)
 
@@ -75,8 +62,25 @@ func scanIntoAccount(rows *sql.Rows) (*Account, error) {
 	return &account, err
 }
 
+func scanIntoUser(rows *sql.Rows) (*User, error) {
+	user := User{}
+	err := rows.Scan(
+		&user.ID,
+		&user.Username,
+		&user.Password,
+		&user.CreatedAt,
+		&user.AccountID,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, err
+}
+
 func (s *PostgresStore) GetAccounts() ([]*Account, error) {
-	query := "SELECT * FROM account"
+	query := "SELECT * FROM accounts"
 
 	rows, err := s.db.Query(query)
 	if err != nil {
@@ -98,7 +102,7 @@ func (s *PostgresStore) GetAccounts() ([]*Account, error) {
 }
 
 func (s *PostgresStore) GetAccountById(accountID uuid.UUID) (*Account, error) {
-	query := "SELECT * FROM account a WHERE a.id = $1"
+	query := "SELECT * FROM accounts a WHERE a.id = $1"
 	rows, err := s.db.Query(query, accountID)
 
 	if err != nil {
@@ -112,30 +116,89 @@ func (s *PostgresStore) GetAccountById(accountID uuid.UUID) (*Account, error) {
 	return nil, fmt.Errorf(`conta '%v' não encontrada`, accountID)
 }
 
-func (s *PostgresStore) CreateAccount(account *Account) error {
+func (s *PostgresStore) GetUserByUsername(username string) (*User, error) {
 	query := `
-		INSERT INTO account (id, name, cpf, balance, created_at)
-		VALUES ($1, $2, $3, $4, $5)
+		SELECT u.*, a.id FROM accounts a
+		INNER JOIN users u ON a.user_id = u.id 
+		WHERE u.username = $1
 	`
 
-	_, err := s.db.Query(
+	rows, err := s.db.Query(query, username)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		return scanIntoUser(rows)
+	}
+
+	return nil, fmt.Errorf(`usuário '%v' não encontrado`, username)
+}
+
+func (s *PostgresStore) CreateAccount(account *Account, user *User) (*Account, error) {
+	tran, err := s.db.Begin()
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Create User
+	query := `
+		INSERT INTO users (id, username, password, created_at)
+		VALUES ($1, $2, $3, $4)
+	`
+
+	rows, err := tran.Query(
+		query,
+		user.ID,
+		user.Username,
+		user.Password,
+		user.CreatedAt,
+	)
+	rows.Close()
+
+	if err != nil {
+		tran.Rollback()
+		return nil, err
+	}
+
+	// Create Account
+	query = `
+		INSERT INTO accounts (id, name, cpf, balance, user_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
+	`
+
+	rows, err = tran.Query(
 		query,
 		account.ID,
 		account.Name,
 		account.Cpf,
 		account.Balance,
+		account.UserID,
 		account.CreatedAt,
 	)
 
 	if err != nil {
-		return err
+		tran.Rollback()
+		return nil, err
 	}
 
-	return nil
+	for rows.Next() {
+		account, err = scanIntoAccount(rows)
+	}
+
+	if err != nil {
+		tran.Rollback()
+		return nil, err
+	}
+
+	tran.Commit()
+	return account, err
 }
 
 func (s *PostgresStore) DeleteAccount(accountID uuid.UUID) error {
-	query := "DELETE FROM account WHERE id = $1"
+	query := "DELETE FROM accounts WHERE id = $1"
 
 	_, err := s.db.Query(query, accountID)
 
@@ -147,5 +210,23 @@ func (s *PostgresStore) DeleteAccount(accountID uuid.UUID) error {
 }
 
 func (s *PostgresStore) UpdateAccount(account *Account) error {
+	query := `
+		UPDATE accounts
+		SET name = $1, cpf = $2, balance = $3
+		WHERE id = $4
+	`
+
+	_, err := s.db.Query(
+		query,
+		account.Name,
+		account.Cpf,
+		account.Balance,
+		account.ID,
+	)
+
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

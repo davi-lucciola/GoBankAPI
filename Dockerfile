@@ -8,9 +8,9 @@ RUN go mod download
 
 COPY . ./
 
-RUN CGO_ENABLED=0 GOOS=linux go build -C ./src -o ../bin/go_api
+RUN CGO_ENABLED=0 GOOS=linux go build -C ./src -o ../bin/go-bank-api
 
 EXPOSE 8084
 
-CMD ["./bin/go_api"]
+CMD ["./bin/go-bank-api"]
 
