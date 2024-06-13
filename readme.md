@@ -4,12 +4,12 @@ First API in Golang!
 
 ## Endpoints
 
-GET - /account (Get All Accounts)
-GET - /account/{id} (Get Account By Id - Needs Autentication) 
-POST - /account (Create New Account)
-DELETE - /account/{id} (Delete account - Needs Autentication)
-PATCH - /transfer (Transfer Amount to especified account - Needs Autentication)
-POST - /login (Create JWT Token)
+- GET - /account (Get All Accounts)
+- GET - /account/{id} (Get Account By Id - Needs Autentication) 
+- POST - /account (Create New Account)
+- DELETE - /account/{id} (Delete account - Needs Autentication)
+- PATCH - /transfer (Transfer Amount to especified account - Needs Autentication)
+- POST - /login (Create JWT Token)
 
 ## Docs
 
